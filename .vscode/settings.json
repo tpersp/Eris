@@ -1,0 +1,21 @@
+{
+    "cSpell.ignoreWords": [
+        "DPMS",
+        "PYTHONUNBUFFERED",
+        "asyncio",
+        "autoplay",
+        "cifs",
+        "fastapi",
+        "mgmt",
+        "noerrdialogs",
+        "nologin",
+        "psutil",
+        "pydantic",
+        "pyyaml",
+        "uvicorn",
+        "venv",
+        "virtualenv",
+        "wscat",
+        "xorg"
+    ]
+}

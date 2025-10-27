@@ -1,0 +1,210 @@
+#!/usr/bin/env bash
+set -euo pipefail
+IFS=$'\n\t'
+
+if [[ $EUID -ne 0 ]]; then
+  echo "This installer must be run as root."
+  exit 1
+fi
+
+echo "Welcome to the Eris installer!"
+
+DEVICE_MODEL="Unknown"
+DEVICE_TYPE="generic_linux"
+if [[ -f /proc/device-tree/model ]]; then
+  DEVICE_MODEL=$(tr -d '\0' < /proc/device-tree/model)
+  case "${DEVICE_MODEL}" in
+    *"Raspberry Pi 4"*)
+      DEVICE_TYPE="pi_4b"
+      ;;
+    *"Raspberry Pi Zero 2 W"*)
+      DEVICE_TYPE="pi_zero_2w"
+      ;;
+  esac
+elif [[ -f /etc/os-release ]]; then
+  # shellcheck disable=SC1091
+  source /etc/os-release
+  DEVICE_MODEL=${PRETTY_NAME:-Unknown}
+fi
+
+case "${DEVICE_TYPE}" in
+  pi_zero_2w)
+    CHROMIUM_FLAGS="--use-gl=egl"
+    FRIENDLY_NAME="Raspberry Pi Zero 2 W"
+    ;;
+  pi_4b)
+    CHROMIUM_FLAGS="--enable-gpu-rasterization"
+    FRIENDLY_NAME="Raspberry Pi 4B"
+    ;;
+  *)
+    CHROMIUM_FLAGS="--use-gl=desktop"
+    FRIENDLY_NAME="Generic Linux"
+    ;;
+esac
+
+echo "Detected: ${FRIENDLY_NAME}"
+echo "Setting up GPU-accelerated Chromium (${CHROMIUM_FLAGS})…"
+
+export DEBIAN_FRONTEND=noninteractive
+echo "Updating package lists…"
+apt update
+echo "Upgrading existing packages…"
+apt upgrade -y
+
+APT_PACKAGES=(
+  python3
+  python3-venv
+  python3-pip
+  git
+  xorg
+  xinit
+  chromium-browser
+  mpv
+  imv
+  cifs-utils
+  curl
+  jq
+)
+echo "Installing dependencies…"
+apt install -y "${APT_PACKAGES[@]}"
+
+echo "Creating Eris service user and directories…"
+useradd -r -s /usr/sbin/nologin eris >/dev/null 2>&1 || true
+mkdir -p /opt/eris
+mkdir -p /var/lib/eris/media/local
+mkdir -p /var/lib/eris/media/cache
+chown -R eris:eris /opt/eris /var/lib/eris
+
+VENV_PATH="/opt/eris/venv"
+echo "Configuring Python virtual environment at ${VENV_PATH}…"
+if [[ ! -d "${VENV_PATH}" ]]; then
+  python3 -m venv "${VENV_PATH}"
+fi
+"${VENV_PATH}/bin/pip" install --upgrade pip
+"${VENV_PATH}/bin/pip" install fastapi uvicorn pyyaml psutil python-multipart bcrypt
+
+read -r -p "Would you like to configure a network media share? [Y/n] " CONFIGURE_SHARE
+CONFIGURE_SHARE=${CONFIGURE_SHARE:-Y}
+USE_NETWORK=false
+NETWORK_PATH=""
+MOUNT_POINT=""
+
+if [[ "${CONFIGURE_SHARE^^}" == "Y" || "${CONFIGURE_SHARE}" == "" ]]; then
+  USE_NETWORK=true
+  read -r -p "Enter Samba share (e.g. //192.168.1.10/Media): " NETWORK_PATH
+  NETWORK_PATH=${NETWORK_PATH:-"//nas/media"}
+  read -r -p "Enter Samba username: " SAMBA_USER
+  SAMBA_USER=${SAMBA_USER:-"guest"}
+  read -r -s -p "Enter Samba password: " SAMBA_PASS
+  echo
+  MOUNT_POINT="/mnt/eris_media"
+  mkdir -p "${MOUNT_POINT}"
+  chown eris:eris "${MOUNT_POINT}"
+  FSTAB_ENTRY="${NETWORK_PATH} ${MOUNT_POINT} cifs username=${SAMBA_USER},password=${SAMBA_PASS},uid=eris,gid=eris,iocharset=utf8,file_mode=0660,dir_mode=0770 0 0"
+  if ! grep -qsF "${NETWORK_PATH} ${MOUNT_POINT} cifs" /etc/fstab; then
+    echo "Adding network share to /etc/fstab…"
+    echo "${FSTAB_ENTRY}" >> /etc/fstab
+  else
+    echo "Network share already present in /etc/fstab; skipping append."
+  fi
+  echo "Mounting ${MOUNT_POINT}…"
+  if ! mount "${MOUNT_POINT}" >/dev/null 2>&1; then
+    echo "Mount failed; retrying with explicit options…"
+    mount -t cifs "${NETWORK_PATH}" "${MOUNT_POINT}" -o "username=${SAMBA_USER},password=${SAMBA_PASS},uid=eris,gid=eris,iocharset=utf8,file_mode=0660,dir_mode=0770"
+  fi
+else
+  echo "Skipping network media share configuration."
+  USE_NETWORK=false
+fi
+
+read -r -p "Enter local media folder path [/var/lib/eris/media/local]: " LOCAL_MEDIA_PATH
+LOCAL_MEDIA_PATH=${LOCAL_MEDIA_PATH:-"/var/lib/eris/media/local"}
+mkdir -p "${LOCAL_MEDIA_PATH}"
+chown -R eris:eris "${LOCAL_MEDIA_PATH}"
+if [[ "${USE_NETWORK}" == false ]]; then
+  MOUNT_POINT="${LOCAL_MEDIA_PATH}"
+fi
+
+read -r -p "Enter Web UI port [8080]: " UI_PORT
+UI_PORT=${UI_PORT:-8080}
+
+while [[ -z "${UI_PORT}" || "${UI_PORT}" =~ [^0-9] ]]; do
+  echo "Port must be a numeric value."
+  read -r -p "Enter Web UI port [8080]: " UI_PORT
+  UI_PORT=${UI_PORT:-8080}
+done
+
+ADMIN_PASSWORD=""
+while [[ -z "${ADMIN_PASSWORD}" ]]; do
+  read -r -s -p "Set admin password: " ADMIN_PASSWORD
+  echo
+  if [[ -z "${ADMIN_PASSWORD}" ]]; then
+    echo "Password cannot be empty."
+  fi
+done
+
+PASSWORD_HASH="$("${VENV_PATH}/bin/python" - <<'PY'
+import bcrypt
+import sys
+
+password = sys.stdin.read().strip().encode("utf-8")
+hashed = bcrypt.hashpw(password, bcrypt.gensalt())
+print(hashed.decode("utf-8"))
+PY
+<<<"${ADMIN_PASSWORD}")"
+unset ADMIN_PASSWORD
+unset SAMBA_PASS
+
+mkdir -p /etc/eris
+CONFIG_PATH="/etc/eris/config.yaml"
+echo "Writing configuration to ${CONFIG_PATH}…"
+cat > "${CONFIG_PATH}" <<EOF
+device:
+  name: eris-$(hostname)
+  homepage: "https://example.com"
+ui:
+  port: ${UI_PORT}
+media:
+  use_network: ${USE_NETWORK}
+  network_path: "${NETWORK_PATH}"
+  mount_point: "${MOUNT_POINT}"
+security:
+  password_hash: "${PASSWORD_HASH}"
+EOF
+chown eris:eris "${CONFIG_PATH}"
+chmod 640 "${CONFIG_PATH}"
+
+echo "Recording Chromium flags…"
+echo "${CHROMIUM_FLAGS}" > /etc/eris/chromium-flags.conf
+chown eris:eris /etc/eris/chromium-flags.conf
+chmod 644 /etc/eris/chromium-flags.conf
+
+SERVICE_SOURCE="scripts/eris.service"
+SERVICE_TARGET="/etc/systemd/system/eris.service"
+if [[ -f "${SERVICE_SOURCE}" ]]; then
+  echo "Configuring systemd service…"
+  cp "${SERVICE_SOURCE}" "${SERVICE_TARGET}"
+  systemctl daemon-reload
+  systemctl enable --now eris
+else
+  echo "Warning: ${SERVICE_SOURCE} not found. Skipping systemd service configuration."
+fi
+
+sleep 5
+if command -v curl >/dev/null 2>&1; then
+  if curl -fsS "http://localhost:${UI_PORT}/health" >/dev/null 2>&1; then
+    echo "API health check succeeded."
+  else
+    echo "Warning: API health check failed. Ensure the Eris service is running."
+  fi
+else
+  echo "curl not available; skipping API health check."
+fi
+
+IP_ADDRESS="$(hostname -I 2>/dev/null | awk '{print $1}')"
+echo "✅ Eris installed successfully!"
+if [[ -n "${IP_ADDRESS}" ]]; then
+  echo "Access it via http://${IP_ADDRESS}:${UI_PORT} or http://eris.local:${UI_PORT}"
+else
+  echo "Access it via http://<your-ip>:${UI_PORT} or http://eris.local:${UI_PORT}"
+fi
