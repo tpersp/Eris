@@ -134,7 +134,7 @@ from typing import Any, Dict
 
 import uvicorn
 import yaml
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -167,18 +167,17 @@ WEBUI_ASSETS = os.path.join(WEBUI_PATH, "assets")
 if os.path.isdir(WEBUI_PATH) and os.path.isfile(WEBUI_INDEX):
   if os.path.isdir(WEBUI_ASSETS):
     app.mount("/assets", StaticFiles(directory=WEBUI_ASSETS), name="assets")
-
-  @app.get("/", include_in_schema=False)
-  def webui_root() -> FileResponse:
-    return FileResponse(WEBUI_INDEX)
+  print("✅ Web UI static routing active (assets under /assets, SPA fallback via index.html)")
 
   @app.get("/{full_path:path}", include_in_schema=False)
-  def webui_spa(full_path: str) -> FileResponse:
-    if full_path.startswith(("api/", "assets/", "ws")):
+  def webui_spa(full_path: str, request: Request) -> FileResponse:
+    blocked = ("api/", "ws", "assets/")
+    if full_path and full_path.startswith(blocked):
+      raise HTTPException(status_code=404, detail="Not Found")
+    path = request.url.path.lstrip("/")
+    if path and path.startswith(blocked):
       raise HTTPException(status_code=404, detail="Not Found")
     return FileResponse(WEBUI_INDEX)
-
-  print(f"Serving Web UI from {WEBUI_PATH}")
 else:
   print(f"⚠️  Web UI directory not found or missing index: {WEBUI_PATH}")
 

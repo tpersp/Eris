@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Set
 
 import uvicorn
-from fastapi import APIRouter, FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, HttpUrl
@@ -255,6 +255,8 @@ if WEBUI_ASSETS.is_dir():
 else:
     logger.warning("Web UI assets directory %s missing; static assets will not be served.", WEBUI_ASSETS)
 
+print("✅ Web UI static routing active (assets under /assets, SPA fallback via index.html)")
+
 
 def _serve_index() -> FileResponse:
     if not INDEX_PATH.is_file():
@@ -262,15 +264,13 @@ def _serve_index() -> FileResponse:
     return FileResponse(str(INDEX_PATH))
 
 
-@app.get("/", include_in_schema=False)
-async def serve_root() -> FileResponse:
-    return _serve_index()
-
-
 @app.get("/{full_path:path}", include_in_schema=False)
-async def serve_spa(full_path: str) -> FileResponse:
-    blocked_prefixes = ("api/", "assets/", "ws", "favicon", "static/")
-    if any(full_path.startswith(prefix) for prefix in blocked_prefixes):
+async def serve_spa(full_path: str, request: Request) -> FileResponse:
+    blocked_prefixes = ("api/", "ws", "assets/")
+    if full_path and any(full_path.startswith(prefix) for prefix in blocked_prefixes):
+        raise HTTPException(status_code=404, detail="Not Found")
+    path = request.url.path.lstrip("/")
+    if path and any(path.startswith(prefix) for prefix in blocked_prefixes):
         raise HTTPException(status_code=404, detail="Not Found")
     return _serve_index()
 
