@@ -2,6 +2,8 @@
 set -euo pipefail
 IFS=$'\n\t'
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 prompt_input() {
   local prompt_text="$1"
   local default_value="$2"
@@ -199,6 +201,35 @@ fi
 
 WEBUI_DIR="/opt/eris/apps/webui"
 WEBUI_DIST="${WEBUI_DIR}/dist"
+SOURCE_WEBUI_DIR="${SCRIPT_DIR}/opt/eris/apps/webui"
+
+if [[ ! -d "${WEBUI_DIR}" ]]; then
+  if [[ -d "${SOURCE_WEBUI_DIR}" ]]; then
+    echo "Copying Web UI source from repository into ${WEBUI_DIR}…"
+    mkdir -p "${WEBUI_DIR}"
+    cp -a "${SOURCE_WEBUI_DIR}/." "${WEBUI_DIR}/"
+  else
+    echo "Web UI source not bundled with installer; cloning repository…"
+    TEMP_CLONE="$(mktemp -d)"
+    trap 'rm -rf "${TEMP_CLONE}"' EXIT
+    if git clone --depth 1 https://github.com/tpersp/Eris.git "${TEMP_CLONE}" >/dev/null 2>&1; then
+      if [[ -d "${TEMP_CLONE}/opt/eris/apps/webui" ]]; then
+        echo "Copying Web UI source from remote repository…"
+        mkdir -p "${WEBUI_DIR}"
+        cp -a "${TEMP_CLONE}/opt/eris/apps/webui/." "${WEBUI_DIR}/"
+      else
+        echo "Error: Cloned repository missing web UI source." >&2
+        exit 1
+      fi
+    else
+      echo "Error: Unable to clone Eris repository for web UI." >&2
+      exit 1
+    fi
+    rm -rf "${TEMP_CLONE}"
+    trap - EXIT
+  fi
+fi
+
 if [[ -d "${WEBUI_DIR}" ]]; then
   if [[ -d "${WEBUI_DIST}" ]]; then
     echo "Web UI build artifacts detected at ${WEBUI_DIST}; skipping build."
