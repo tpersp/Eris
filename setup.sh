@@ -106,6 +106,13 @@ APT_PACKAGES=(
 echo "Installing dependencies…"
 apt install -y "${APT_PACKAGES[@]}"
 
+if ! command -v node >/dev/null 2>&1 || ! command -v npm >/dev/null 2>&1; then
+  echo "Installing Node.js and npm…"
+  apt install -y nodejs npm
+else
+  echo "Node.js and npm already installed."
+fi
+
 echo "Creating Eris service user and directories…"
 useradd -r -s /usr/sbin/nologin eris >/dev/null 2>&1 || true
 mkdir -p /opt/eris
@@ -189,6 +196,24 @@ if [[ ! -d "${VENV_PATH}" ]]; then
 fi
 "${VENV_PATH}/bin/pip" install --upgrade pip
 "${VENV_PATH}/bin/pip" install fastapi uvicorn pyyaml psutil python-multipart bcrypt
+
+WEBUI_DIR="/opt/eris/apps/webui"
+WEBUI_DIST="${WEBUI_DIR}/dist"
+if [[ -d "${WEBUI_DIR}" ]]; then
+  if [[ -d "${WEBUI_DIST}" ]]; then
+    echo "Web UI build artifacts detected at ${WEBUI_DIST}; skipping build."
+  else
+    echo "Building Eris Web UI..."
+    pushd "${WEBUI_DIR}" >/dev/null
+    npm install --omit=dev
+    npm run build
+    popd >/dev/null
+    chown -R eris:eris "${WEBUI_DIR}"
+    echo "Eris Web UI build complete."
+  fi
+else
+  echo "Warning: Web UI directory ${WEBUI_DIR} not found; skipping build."
+fi
 
 CONFIGURE_SHARE="$(prompt_input "Would you like to configure a network media share? [Y/n] " "Y")"
 USE_NETWORK=false

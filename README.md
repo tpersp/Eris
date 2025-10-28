@@ -31,6 +31,7 @@ sudo bash setup.sh
 The interactive installer will:
 - Detect the device type (Pi Zero 2 W, Pi 4 B, or generic Linux)
 - Install Chromium, mpv, Python, and other dependencies
+- Install Node.js/npm when missing and build the Eris web control UI
 - Create the `/opt/eris` virtual environment
 - Configure and enable the `eris.service` systemd unit
 - Offer to mount an optional Samba media share
@@ -109,3 +110,11 @@ sudo bash scripts/uninstall.sh
 ## Security note
 
 Set a strong admin password during installation, keep devices on trusted networks, and avoid exposing Eris directly to the public Internet without firewalls or an HTTPS reverse proxy. Pair new controllers through the web UI to ensure only authorized users manage the displays.
+
+**Developer note:** Rebuild the web UI manually with:
+
+```bash
+cd /opt/eris/apps/webui
+npm install
+npm run build
+```
