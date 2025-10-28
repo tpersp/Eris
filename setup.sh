@@ -136,7 +136,7 @@ import uvicorn
 import yaml
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse
-from fastapi.staticfiles import StaticFiles
+from starlette.staticfiles import StaticFiles
 
 START_TIME = time.time()
 CONFIG_PATH = "/etc/eris/config.yaml"
@@ -164,19 +164,26 @@ app = FastAPI(title="Eris Placeholder Daemon")
 WEBUI_PATH = "/opt/eris/apps/webui/dist"
 WEBUI_INDEX = os.path.join(WEBUI_PATH, "index.html")
 WEBUI_ASSETS = os.path.join(WEBUI_PATH, "assets")
+class SafeStaticFiles(StaticFiles):
+  async def __call__(self, scope, receive, send):
+    if scope["type"] != "http":
+      return
+    await super().__call__(scope, receive, send)
+
+
 if os.path.isdir(WEBUI_PATH) and os.path.isfile(WEBUI_INDEX):
   if os.path.isdir(WEBUI_ASSETS):
-    app.mount("/assets", StaticFiles(directory=WEBUI_ASSETS), name="assets")
-  print("✅ Web UI static routing active (assets under /assets, SPA fallback via index.html)")
+    app.mount("/assets", SafeStaticFiles(directory=WEBUI_ASSETS), name="assets")
+  print("✅ Web UI static routing isolated — SafeStaticFiles prevents WS assertion errors")
 
   @app.get("/{full_path:path}", include_in_schema=False)
-  def webui_spa(full_path: str, request: Request) -> FileResponse:
+  def webui_spa(full_path: str, request: Request):
     blocked = ("api/", "ws", "assets/")
     if full_path and full_path.startswith(blocked):
-      raise HTTPException(status_code=404, detail="Not Found")
+      return {"detail": "Not Found"}
     path = request.url.path.lstrip("/")
     if path and path.startswith(blocked):
-      raise HTTPException(status_code=404, detail="Not Found")
+      return {"detail": "Not Found"}
     return FileResponse(WEBUI_INDEX)
 else:
   print(f"⚠️  Web UI directory not found or missing index: {WEBUI_PATH}")

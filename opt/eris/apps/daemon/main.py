@@ -10,8 +10,8 @@ from typing import Dict, List, Optional, Set
 import uvicorn
 from fastapi import APIRouter, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
-from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, HttpUrl
+from starlette.staticfiles import StaticFiles
 
 from adapters.chromium import ChromiumAdapter
 from adapters.media_stub import list_media, play
@@ -249,13 +249,20 @@ signal.signal(signal.SIGTERM, handle_sigterm)
 
 app.include_router(api_router)
 
+class SafeStaticFiles(StaticFiles):
+    async def __call__(self, scope, receive, send):  # type: ignore[override]
+        if scope["type"] != "http":
+            return
+        await super().__call__(scope, receive, send)
+
+
 if WEBUI_ASSETS.is_dir():
-    app.mount("/assets", StaticFiles(directory=str(WEBUI_ASSETS)), name="assets")
+    app.mount("/assets", SafeStaticFiles(directory=str(WEBUI_ASSETS)), name="assets")
     logger.info("Serving Web UI assets from %s", WEBUI_ASSETS)
 else:
     logger.warning("Web UI assets directory %s missing; static assets will not be served.", WEBUI_ASSETS)
 
-print("✅ Web UI static routing active (assets under /assets, SPA fallback via index.html)")
+print("✅ Web UI static routing isolated — SafeStaticFiles prevents WS assertion errors")
 
 
 def _serve_index() -> FileResponse:
@@ -268,10 +275,10 @@ def _serve_index() -> FileResponse:
 async def serve_spa(full_path: str, request: Request) -> FileResponse:
     blocked_prefixes = ("api/", "ws", "assets/")
     if full_path and any(full_path.startswith(prefix) for prefix in blocked_prefixes):
-        raise HTTPException(status_code=404, detail="Not Found")
+        return {"detail": "Not Found"}
     path = request.url.path.lstrip("/")
     if path and any(path.startswith(prefix) for prefix in blocked_prefixes):
-        raise HTTPException(status_code=404, detail="Not Found")
+        return {"detail": "Not Found"}
     return _serve_index()
 
 
