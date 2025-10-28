@@ -3,10 +3,13 @@ import logging
 import signal
 import sys
 import time
+from pathlib import Path
 from typing import Dict, List, Optional, Set
 
 import uvicorn
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, HttpUrl
 
 from adapters.chromium import ChromiumAdapter
@@ -32,6 +35,7 @@ ERIS_VERSION = "0.1.0"
 START_TIME = time.time()
 
 app = FastAPI(title="Eris Core Daemon", version=ERIS_VERSION)
+api_router = APIRouter(prefix="/api")
 state = ErisState(mode="web", url=CONFIG["device"]["homepage"])
 
 chromium_adapter = ChromiumAdapter(
@@ -144,18 +148,18 @@ async def shutdown_event() -> None:
     await _run_in_executor(chromium_adapter.stop)
 
 
-@app.get("/api/health")
+@api_router.get("/health")
 async def api_health() -> Dict[str, float]:
     return build_health_payload()
 
 
-@app.get("/api/state")
+@api_router.get("/state")
 async def api_state() -> Dict[str, object]:
     state.uptime = compute_uptime()
     return {"mode": state.mode, "url": state.url, "uptime": state.uptime}
 
 
-@app.post("/api/web/navigate")
+@api_router.post("/web/navigate")
 async def api_web_navigate(request: NavigateRequest) -> Dict[str, str]:
     target_url = str(request.url)
     await _run_in_executor(chromium_adapter.restart, target_url)
@@ -165,7 +169,7 @@ async def api_web_navigate(request: NavigateRequest) -> Dict[str, str]:
     return {"status": "ok"}
 
 
-@app.post("/api/web/action")
+@api_router.post("/web/action")
 async def api_web_action(request: WebActionRequest) -> Dict[str, str]:
     try:
         action = request.validate_command()
@@ -182,19 +186,19 @@ async def api_web_action(request: WebActionRequest) -> Dict[str, str]:
     return {"status": "ok"}
 
 
-@app.post("/api/display/blank")
+@api_router.post("/display/blank")
 async def api_display_blank(request: DisplayBlankRequest) -> Dict[str, str]:
     await _run_in_executor(set_display_blank, request.on)
     return {"status": "ok"}
 
 
-@app.get("/api/media")
+@api_router.get("/media")
 async def api_media() -> Dict[str, List[str]]:
     items = await _run_in_executor(list_media)
     return {"items": items}
 
 
-@app.post("/api/media/play")
+@api_router.post("/media/play")
 async def api_media_play(request: MediaPlayRequest) -> Dict[str, str]:
     await _run_in_executor(play, request.path)
     state.mode = "media"
@@ -231,6 +235,38 @@ def handle_sigterm(signum, frame) -> None:
 signal.signal(signal.SIGTERM, handle_sigterm)
 
 
+WEBUI_DIST = Path("/opt/eris/apps/webui/dist")
+INDEX_FILE = WEBUI_DIST / "index.html"
+
+if WEBUI_DIST.is_dir():
+    assets_dir = WEBUI_DIST / "assets"
+    if assets_dir.is_dir():
+        app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="webui-assets")
+
+    if INDEX_FILE.is_file():
+
+        @app.get("/", include_in_schema=False)
+        async def serve_index() -> FileResponse:
+            return FileResponse(str(INDEX_FILE))
+    else:
+        logger.warning("Web UI index.html not found at %s", INDEX_FILE)
+
+    additional_files = [p for p in WEBUI_DIST.iterdir() if p.is_file() and p.name != "index.html"]
+    if additional_files:
+
+        @app.get("/{filename}", include_in_schema=False)
+        async def serve_additional(filename: str) -> FileResponse:
+            target = WEBUI_DIST / filename
+            if target.is_file():
+                return FileResponse(str(target))
+            raise HTTPException(status_code=404, detail="Resource not found")
+else:
+    logger.warning("Web UI dist directory %s missing; UI will not be served.", WEBUI_DIST)
+
+
+app.include_router(api_router)
+
+
 def run() -> None:
     port = int(CONFIG["ui"].get("port", 8080))
     uvicorn.run("main:app", host="0.0.0.0", port=port, log_level="info")
@@ -238,4 +274,3 @@ def run() -> None:
 
 if __name__ == "__main__":
     run()
-
