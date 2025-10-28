@@ -24,6 +24,7 @@ git clone https://github.com/tpersp/Eris.git
 cd Eris
 
 # 2. Run interactive setup
+chmod +x setup.sh
 sudo bash setup.sh
 ```
 
