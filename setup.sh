@@ -109,9 +109,78 @@ apt install -y "${APT_PACKAGES[@]}"
 echo "Creating Eris service user and directories…"
 useradd -r -s /usr/sbin/nologin eris >/dev/null 2>&1 || true
 mkdir -p /opt/eris
+mkdir -p /opt/eris/apps/daemon
 mkdir -p /var/lib/eris/media/local
 mkdir -p /var/lib/eris/media/cache
 chown -R eris:eris /opt/eris /var/lib/eris
+
+DAEMON_MAIN="/opt/eris/apps/daemon/main.py"
+if [[ ! -f "${DAEMON_MAIN}" ]]; then
+  echo "Writing placeholder daemon to ${DAEMON_MAIN}…"
+  cat > "${DAEMON_MAIN}" <<'PY'
+#!/usr/bin/env python3
+import os
+import time
+from typing import Any, Dict
+
+import uvicorn
+import yaml
+from fastapi import FastAPI
+
+START_TIME = time.time()
+CONFIG_PATH = "/etc/eris/config.yaml"
+
+
+def load_config() -> Dict[str, Any]:
+  if os.path.exists(CONFIG_PATH):
+    with open(CONFIG_PATH, "r", encoding="utf-8") as handle:
+      data = yaml.safe_load(handle) or {}
+      if isinstance(data, dict):
+        return data
+  return {}
+
+
+def resolve_port(config: Dict[str, Any]) -> int:
+  try:
+    port = int(config.get("ui", {}).get("port", 8080))
+  except Exception:
+    port = 8080
+  return port
+
+
+app = FastAPI(title="Eris Placeholder Daemon")
+
+
+@app.get("/api/health")
+def health() -> Dict[str, Any]:
+  uptime = int(time.time() - START_TIME)
+  return {
+      "status": "ok",
+      "uptime": uptime,
+      "version": "placeholder",
+  }
+
+
+@app.get("/api/state")
+def state() -> Dict[str, Any]:
+  return {
+      "mode": "web",
+      "url": load_config().get("device", {}).get("homepage", "https://example.com"),
+  }
+
+
+def main() -> None:
+  config = load_config()
+  port = resolve_port(config)
+  uvicorn.run(app, host="0.0.0.0", port=port)
+
+
+if __name__ == "__main__":
+  main()
+PY
+  chmod 755 "${DAEMON_MAIN}"
+  chown eris:eris "${DAEMON_MAIN}"
+fi
 
 VENV_PATH="/opt/eris/venv"
 echo "Configuring Python virtual environment at ${VENV_PATH}…"
