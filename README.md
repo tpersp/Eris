@@ -43,7 +43,7 @@ Configuration lives under `/etc/eris/`:
 
 ```
 /etc/eris/config.yaml
-/etc/eris/chromium_flags
+/etc/eris/chromium-flags.conf
 ```
 
 Minimal examples:
@@ -62,7 +62,7 @@ media:
 ```
 
 ```bash
-# /etc/eris/chromium_flags
+# /etc/eris/chromium-flags.conf
 --enable-gpu-rasterization
 --no-first-run
 --disable-infobars
@@ -104,7 +104,7 @@ sudo bash scripts/uninstall.sh
 
 | Symptom | Fix |
 | --- | --- |
-| Black screen | Check HDMI connection and Chromium flags in `/etc/eris/chromium_flags` |
+| Black screen | Check HDMI connection and Chromium flags in `/etc/eris/chromium-flags.conf` |
 | Web UI unreachable | Confirm port 8080 is open (`curl localhost:8080`) |
 | Samba share not mounting | Verify the `/etc/fstab` entry and run `sudo mount -a` |
 | Daemon crash | Inspect logs with `journalctl -u eris -f` |

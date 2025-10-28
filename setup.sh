@@ -156,6 +156,15 @@ echo "Setting up GPU-accelerated Chromium (${CHROMIUM_FLAGS})…"
 
 install_system_dependencies
 
+CHROMIUM_FLAGS_FILE="/etc/eris/chromium-flags.conf"
+CHROMIUM_BINARY="$(command -v chromium-browser || true)"
+if [[ -z "${CHROMIUM_BINARY}" ]]; then
+  CHROMIUM_BINARY="$(command -v chromium || true)"
+fi
+if [[ -z "${CHROMIUM_BINARY}" ]]; then
+  CHROMIUM_BINARY="/usr/bin/chromium-browser"
+fi
+
 echo "Creating Eris service user and directories…"
 useradd -r -s /usr/sbin/nologin eris >/dev/null 2>&1 || true
 mkdir -p /opt/eris
@@ -321,14 +330,17 @@ media:
   mount_point: "${MOUNT_POINT}"
 security:
   password_hash: "${PASSWORD_HASH}"
+chromium:
+  binary: "${CHROMIUM_BINARY}"
+  flags_file: "${CHROMIUM_FLAGS_FILE}"
 EOF
 chown eris:eris "${CONFIG_PATH}"
 chmod 640 "${CONFIG_PATH}"
 
 echo "Recording Chromium flags…"
-echo "${CHROMIUM_FLAGS}" > /etc/eris/chromium-flags.conf
-chown eris:eris /etc/eris/chromium-flags.conf
-chmod 644 /etc/eris/chromium-flags.conf
+echo "${CHROMIUM_FLAGS}" > "${CHROMIUM_FLAGS_FILE}"
+chown eris:eris "${CHROMIUM_FLAGS_FILE}"
+chmod 644 "${CHROMIUM_FLAGS_FILE}"
 
 SERVICE_SOURCE="scripts/eris.service"
 SERVICE_TARGET="/etc/systemd/system/eris.service"

@@ -6,20 +6,31 @@ from typing import Any, Dict
 import psutil
 import yaml
 
+logger = logging.getLogger(__name__)
+
+DEFAULT_CONFIG_PATH = os.environ.get("ERIS_CONFIG_PATH", "/etc/eris/config.yaml")
+DEFAULT_FLAGS_FILE = os.environ.get(
+    "ERIS_CHROMIUM_FLAGS_FILE", "/etc/eris/chromium-flags.conf"
+)
+DEFAULT_CHROMIUM_BINARY = os.environ.get(
+    "ERIS_CHROMIUM_BINARY", "/usr/bin/chromium-browser"
+)
+
 DEFAULT_CONFIG: Dict[str, Any] = {
     "ui": {"port": 8080},
     "device": {"homepage": "https://example.com"},
     "chromium": {
-        "flags_file": "/etc/eris/chromium_flags",
-        "binary": "/usr/bin/chromium-browser",
+        "flags_file": DEFAULT_FLAGS_FILE,
+        "binary": DEFAULT_CHROMIUM_BINARY,
     },
 }
 
 
-def load_config(path: str = "/etc/eris/config.yaml") -> Dict[str, Any]:
+def load_config(path: str = "") -> Dict[str, Any]:
     config = DEFAULT_CONFIG.copy()
-    config_path = Path(path)
+    config_path = Path(path or DEFAULT_CONFIG_PATH)
     if not config_path.exists():
+        logger.warning("Configuration file %s missing; using defaults.", config_path)
         return config
 
     try:
@@ -73,4 +84,3 @@ def set_display_blank(on: bool) -> None:
     # Placeholder for future DPMS/xset integration.
     if not os.environ.get("DISPLAY"):
         os.environ.setdefault("DISPLAY", ":0")
-
