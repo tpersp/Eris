@@ -1,0 +1,17 @@
+[Unit]
+Description=Eris Core Daemon
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=eris
+Group=eris
+WorkingDirectory=/opt/eris/apps/daemon
+ExecStart=/opt/eris/venv/bin/python3 -m main
+Restart=always
+RestartSec=3
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target

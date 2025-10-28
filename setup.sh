@@ -2,6 +2,44 @@
 set -euo pipefail
 IFS=$'\n\t'
 
+prompt_input() {
+  local prompt_text="$1"
+  local default_value="$2"
+  local input=""
+
+  if [[ -t 0 ]]; then
+    read -r -p "${prompt_text}" input
+  elif [[ -e /dev/tty ]]; then
+    read -r -p "${prompt_text}" input < /dev/tty
+  else
+    input=""
+  fi
+
+  if [[ -z "${input}" ]]; then
+    input="${default_value}"
+  fi
+
+  printf '%s' "${input}"
+}
+
+prompt_secret() {
+  local prompt_text="$1"
+  local input=""
+
+  if [[ -t 0 ]]; then
+    read -r -s -p "${prompt_text}" input
+    echo
+  elif [[ -e /dev/tty ]]; then
+    read -r -s -p "${prompt_text}" input < /dev/tty
+    echo >/dev/tty
+  else
+    echo "Error: unable to read secret input (no TTY available)." >&2
+    exit 1
+  fi
+
+  printf '%s' "${input}"
+}
+
 if [[ $EUID -ne 0 ]]; then
   echo "This installer must be run as root."
   exit 1
@@ -83,20 +121,16 @@ fi
 "${VENV_PATH}/bin/pip" install --upgrade pip
 "${VENV_PATH}/bin/pip" install fastapi uvicorn pyyaml psutil python-multipart bcrypt
 
-read -r -p "Would you like to configure a network media share? [Y/n] " CONFIGURE_SHARE
-CONFIGURE_SHARE=${CONFIGURE_SHARE:-Y}
+CONFIGURE_SHARE="$(prompt_input "Would you like to configure a network media share? [Y/n] " "Y")"
 USE_NETWORK=false
 NETWORK_PATH=""
 MOUNT_POINT=""
 
 if [[ "${CONFIGURE_SHARE^^}" == "Y" || "${CONFIGURE_SHARE}" == "" ]]; then
   USE_NETWORK=true
-  read -r -p "Enter Samba share (e.g. //192.168.1.10/Media): " NETWORK_PATH
-  NETWORK_PATH=${NETWORK_PATH:-"//nas/media"}
-  read -r -p "Enter Samba username: " SAMBA_USER
-  SAMBA_USER=${SAMBA_USER:-"guest"}
-  read -r -s -p "Enter Samba password: " SAMBA_PASS
-  echo
+  NETWORK_PATH="$(prompt_input "Enter Samba share (e.g. //192.168.1.10/Media): " "//nas/media")"
+  SAMBA_USER="$(prompt_input "Enter Samba username: " "guest")"
+  SAMBA_PASS="$(prompt_secret "Enter Samba password: ")"
   MOUNT_POINT="/mnt/eris_media"
   mkdir -p "${MOUNT_POINT}"
   chown eris:eris "${MOUNT_POINT}"
@@ -117,41 +151,37 @@ else
   USE_NETWORK=false
 fi
 
-read -r -p "Enter local media folder path [/var/lib/eris/media/local]: " LOCAL_MEDIA_PATH
-LOCAL_MEDIA_PATH=${LOCAL_MEDIA_PATH:-"/var/lib/eris/media/local"}
+LOCAL_MEDIA_PATH="$(prompt_input "Enter local media folder path [/var/lib/eris/media/local]: " "/var/lib/eris/media/local")"
 mkdir -p "${LOCAL_MEDIA_PATH}"
 chown -R eris:eris "${LOCAL_MEDIA_PATH}"
 if [[ "${USE_NETWORK}" == false ]]; then
   MOUNT_POINT="${LOCAL_MEDIA_PATH}"
 fi
 
-read -r -p "Enter Web UI port [8080]: " UI_PORT
-UI_PORT=${UI_PORT:-8080}
-
+UI_PORT="$(prompt_input "Enter Web UI port [8080]: " "8080")"
 while [[ -z "${UI_PORT}" || "${UI_PORT}" =~ [^0-9] ]]; do
   echo "Port must be a numeric value."
-  read -r -p "Enter Web UI port [8080]: " UI_PORT
-  UI_PORT=${UI_PORT:-8080}
+  UI_PORT="$(prompt_input "Enter Web UI port [8080]: " "8080")"
 done
 
 ADMIN_PASSWORD=""
 while [[ -z "${ADMIN_PASSWORD}" ]]; do
-  read -r -s -p "Set admin password: " ADMIN_PASSWORD
-  echo
+  ADMIN_PASSWORD="$(prompt_secret "Set admin password: ")"
   if [[ -z "${ADMIN_PASSWORD}" ]]; then
     echo "Password cannot be empty."
   fi
 done
 
-PASSWORD_HASH="$("${VENV_PATH}/bin/python" - <<'PY'
+PASSWORD_HASH="$(
+  ERIS_ADMIN_PASSWORD="${ADMIN_PASSWORD}" "${VENV_PATH}/bin/python" - <<'PY'
 import bcrypt
-import sys
+import os
 
-password = sys.stdin.read().strip().encode("utf-8")
+password = os.environ["ERIS_ADMIN_PASSWORD"].encode("utf-8")
 hashed = bcrypt.hashpw(password, bcrypt.gensalt())
 print(hashed.decode("utf-8"))
 PY
-<<<"${ADMIN_PASSWORD}")"
+)"
 unset ADMIN_PASSWORD
 unset SAMBA_PASS
 
