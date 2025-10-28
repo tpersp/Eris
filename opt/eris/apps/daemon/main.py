@@ -8,7 +8,6 @@ from typing import Dict, List, Optional, Set
 
 import uvicorn
 from fastapi import APIRouter, FastAPI, HTTPException, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, HttpUrl
 
@@ -241,16 +240,9 @@ WEBUI_DIST = Path("/opt/eris/apps/webui/dist")
 
 if WEBUI_DIST.is_dir():
     logger.info("Serving Web UI from %s", WEBUI_DIST)
-    app.mount("/webui", StaticFiles(directory=str(WEBUI_DIST), html=True), name="webui")
+    app.mount("/", StaticFiles(directory=str(WEBUI_DIST), html=True), name="webui")
 else:
     logger.warning("Web UI dist directory %s missing; UI will not be served.", WEBUI_DIST)
-
-
-@app.get("/")
-async def redirect_to_ui():
-    return HTMLResponse(
-        "<html><head><meta http-equiv='refresh' content='0;url=/webui/' /></head></html>"
-    )
 
 
 def run() -> None:
