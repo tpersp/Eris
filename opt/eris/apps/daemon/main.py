@@ -34,15 +34,9 @@ logger = logging.getLogger("eris.daemon")
 CONFIG = load_config()
 ERIS_VERSION = "0.1.0"
 START_TIME = time.time()
+WEBUI_PATH = Path("/opt/eris/apps/webui/dist")
 
 app = FastAPI(title="Eris Core Daemon", version=ERIS_VERSION)
-
-WEBUI_PATH = "/opt/eris/apps/webui/dist"
-if os.path.isdir(WEBUI_PATH):
-    app.mount("/", StaticFiles(directory=WEBUI_PATH, html=True), name="webui")
-    print(f"Serving Web UI from {WEBUI_PATH}")
-else:
-    print(f"⚠️  Web UI directory not found: {WEBUI_PATH}")
 
 api_router = APIRouter(prefix="/api")
 state = ErisState(mode="web", url=CONFIG["device"]["homepage"])
@@ -253,6 +247,7 @@ signal.signal(signal.SIGTERM, handle_sigterm)
 
 app.include_router(api_router)
 
+
 def _ensure_webui_mount_last() -> None:
     webui_route = None
     for route in list(app.router.routes):
@@ -264,14 +259,16 @@ def _ensure_webui_mount_last() -> None:
         app.router.routes.append(webui_route)
 
 
-_ensure_webui_mount_last()
+def mount_webui_assets() -> None:
+    if WEBUI_PATH.is_dir():
+        app.mount("/", StaticFiles(directory=str(WEBUI_PATH), html=True), name="webui")
+        _ensure_webui_mount_last()
+        logger.info("Serving Web UI from %s", WEBUI_PATH)
+    else:
+        logger.warning("Web UI dist directory %s missing; UI will not be served.", WEBUI_PATH)
 
-WEBUI_DIST = Path("/opt/eris/apps/webui/dist")
 
-if WEBUI_DIST.is_dir():
-    logger.info("Serving Web UI from %s", WEBUI_DIST)
-else:
-    logger.warning("Web UI dist directory %s missing; UI will not be served.", WEBUI_DIST)
+mount_webui_assets()
 
 
 def run() -> None:
