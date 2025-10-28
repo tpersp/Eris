@@ -166,7 +166,7 @@ WEBUI_INDEX = os.path.join(WEBUI_PATH, "index.html")
 WEBUI_ASSETS = os.path.join(WEBUI_PATH, "assets")
 if os.path.isdir(WEBUI_PATH) and os.path.isfile(WEBUI_INDEX):
   if os.path.isdir(WEBUI_ASSETS):
-    app.mount("/assets", StaticFiles(directory=WEBUI_ASSETS), name="webui-assets")
+    app.mount("/assets", StaticFiles(directory=WEBUI_ASSETS), name="assets")
 
   @app.get("/", include_in_schema=False)
   def webui_root() -> FileResponse:

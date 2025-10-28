@@ -2,7 +2,8 @@
 set -e
 cd /opt/eris
 if [ -d .git ]; then
-  git fetch --all
+  echo "Refreshing repository..."
+  git fetch origin main
   git reset --hard origin/main
 fi
 source venv/bin/activate

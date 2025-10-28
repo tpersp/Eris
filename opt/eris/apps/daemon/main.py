@@ -35,6 +35,8 @@ CONFIG = load_config()
 ERIS_VERSION = "0.1.0"
 START_TIME = time.time()
 WEBUI_PATH = Path("/opt/eris/apps/webui/dist")
+WEBUI_ASSETS = WEBUI_PATH / "assets"
+INDEX_PATH = WEBUI_PATH / "index.html"
 
 app = FastAPI(title="Eris Core Daemon", version=ERIS_VERSION)
 
@@ -247,36 +249,30 @@ signal.signal(signal.SIGTERM, handle_sigterm)
 
 app.include_router(api_router)
 
-
-def mount_webui_assets() -> None:
-    if not WEBUI_PATH.is_dir():
-        logger.warning("Web UI dist directory %s missing; UI will not be served.", WEBUI_PATH)
-        return
-
-    assets_dir = WEBUI_PATH / "assets"
-    if assets_dir.is_dir():
-        app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="webui-assets")
-
-    index_file = WEBUI_PATH / "index.html"
-    if not index_file.is_file():
-        logger.warning("Web UI index file missing at %s; UI will not be served.", index_file)
-        return
-
-    logger.info("Serving Web UI from %s", WEBUI_PATH)
-
-    @app.get("/", include_in_schema=False)
-    async def webui_root() -> FileResponse:  # type: ignore[override]
-        return FileResponse(str(index_file))
-
-    @app.get("/{full_path:path}", include_in_schema=False)
-    async def webui_spa(full_path: str) -> FileResponse:  # type: ignore[override]
-        blocked_prefixes = ("api/", "assets/", "ws", "favicon", "static/")
-        if any(full_path.startswith(prefix) for prefix in blocked_prefixes):
-            raise HTTPException(status_code=404, detail="Not Found")
-        return FileResponse(str(index_file))
+if WEBUI_ASSETS.is_dir():
+    app.mount("/assets", StaticFiles(directory=str(WEBUI_ASSETS)), name="assets")
+    logger.info("Serving Web UI assets from %s", WEBUI_ASSETS)
+else:
+    logger.warning("Web UI assets directory %s missing; static assets will not be served.", WEBUI_ASSETS)
 
 
-mount_webui_assets()
+def _serve_index() -> FileResponse:
+    if not INDEX_PATH.is_file():
+        raise HTTPException(status_code=404, detail="Web UI not built")
+    return FileResponse(str(INDEX_PATH))
+
+
+@app.get("/", include_in_schema=False)
+async def serve_root() -> FileResponse:
+    return _serve_index()
+
+
+@app.get("/{full_path:path}", include_in_schema=False)
+async def serve_spa(full_path: str) -> FileResponse:
+    blocked_prefixes = ("api/", "assets/", "ws", "favicon", "static/")
+    if any(full_path.startswith(prefix) for prefix in blocked_prefixes):
+        raise HTTPException(status_code=404, detail="Not Found")
+    return _serve_index()
 
 
 def run() -> None:
