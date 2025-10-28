@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-set -e
+set -euo pipefail
 
-echo "🔄 Updating Eris from origin/main..."
+echo "🔄 Pulling latest Eris changes from origin/main..."
 cd "$(dirname "$0")/.."
 
 git fetch origin main
-git reset --hard origin/main
+git checkout main
+git pull --ff-only origin main
 
 if [ ! -d "venv" ]; then
   echo "Creating Python virtual environment..."
@@ -18,7 +19,7 @@ pip install --upgrade pip wheel setuptools
 
 if [ -f requirements.txt ]; then
   echo "Installing Python dependencies..."
-  pip install -r requirements.txt
+  pip install --upgrade -r requirements.txt
 fi
 
 if [ -x setup.sh ]; then
@@ -29,4 +30,4 @@ fi
 echo "Restarting eris service..."
 sudo systemctl restart eris
 
-echo "✅ Eris updated and restarted successfully."
+echo "✅ Eris updated and restarted"

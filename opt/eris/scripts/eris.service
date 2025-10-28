@@ -8,11 +8,10 @@ Type=simple
 User=eris
 Group=eris
 WorkingDirectory=/opt/eris/apps/daemon
-ExecStart=/opt/eris/venv/bin/python3 -m main
+ExecStart=/opt/eris/venv/bin/python3 /opt/eris/apps/daemon/main.py
 Restart=always
 RestartSec=3
 Environment=PYTHONUNBUFFERED=1
 
 [Install]
 WantedBy=multi-user.target
-

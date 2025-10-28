@@ -147,6 +147,9 @@ async def startup_event() -> None:
 
     health_task = asyncio.create_task(periodic_health())
 
+    if STATIC_ROUTES_READY:
+        logger.info("✅ Web UI static routing active — serving from %s", WEBUI_PATH)
+
 
 @app.on_event("shutdown")
 async def shutdown_event() -> None:
@@ -253,17 +256,22 @@ app.include_router(api_router)
 class SafeStaticFiles(StaticFiles):
     async def __call__(self, scope, receive, send):  # type: ignore[override]
         if scope["type"] != "http":
-            return
+            # Defer non-HTTP scopes (e.g., websocket) to avoid StaticFiles assertions.
+            return await self.app(scope, receive, send)
         return await super().__call__(scope, receive, send)
 
 
-if WEBUI_ASSETS.is_dir():
-    app.mount("/assets", SafeStaticFiles(directory=str(WEBUI_ASSETS)), name="assets")
-    logger.info("Serving Web UI from %s", WEBUI_PATH)
+STATIC_ROUTES_READY = False
+if not WEBUI_PATH.is_dir():
+    logger.warning("Web UI directory %s missing; static assets will not be served.", WEBUI_PATH)
+elif not INDEX_PATH.is_file():
+    logger.warning("Web UI index %s missing; routes will 404.", INDEX_PATH)
 else:
-    logger.warning("Web UI assets directory %s missing; static assets will not be served.", WEBUI_ASSETS)
-
-print("✅ Web UI static routing isolated — SafeStaticFiles prevents WS assertion errors")
+    if WEBUI_ASSETS.is_dir():
+        app.mount("/assets", SafeStaticFiles(directory=str(WEBUI_ASSETS)), name="assets")
+        STATIC_ROUTES_READY = True
+    else:
+        logger.warning("Web UI assets directory %s missing; /assets will not be mounted.", WEBUI_ASSETS)
 
 
 def _serve_index() -> FileResponse:

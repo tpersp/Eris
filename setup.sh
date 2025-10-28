@@ -163,102 +163,18 @@ mkdir -p /opt/eris/apps/daemon
 mkdir -p /var/lib/eris/media/local
 mkdir -p /var/lib/eris/media/cache
 chown -R eris:eris /opt/eris /var/lib/eris
-
-DAEMON_MAIN="/opt/eris/apps/daemon/main.py"
-if [[ ! -f "${DAEMON_MAIN}" ]]; then
-  echo "Writing placeholder daemon to ${DAEMON_MAIN}…"
-  cat > "${DAEMON_MAIN}" <<'PY'
-#!/usr/bin/env python3
-import os
-import time
-from typing import Any, Dict
-
-import uvicorn
-import yaml
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse
-from starlette.staticfiles import StaticFiles
-
-START_TIME = time.time()
-CONFIG_PATH = "/etc/eris/config.yaml"
-
-
-def load_config() -> Dict[str, Any]:
-  if os.path.exists(CONFIG_PATH):
-    with open(CONFIG_PATH, "r", encoding="utf-8") as handle:
-      data = yaml.safe_load(handle) or {}
-      if isinstance(data, dict):
-        return data
-  return {}
-
-
-def resolve_port(config: Dict[str, Any]) -> int:
-  try:
-    port = int(config.get("ui", {}).get("port", 8080))
-  except Exception:
-    port = 8080
-  return port
-
-
-app = FastAPI(title="Eris Placeholder Daemon")
-
-WEBUI_PATH = "/opt/eris/apps/webui/dist"
-WEBUI_INDEX = os.path.join(WEBUI_PATH, "index.html")
-WEBUI_ASSETS = os.path.join(WEBUI_PATH, "assets")
-class SafeStaticFiles(StaticFiles):
-  async def __call__(self, scope, receive, send):
-    if scope["type"] != "http":
-      return
-    await super().__call__(scope, receive, send)
-
-
-if os.path.isdir(WEBUI_PATH) and os.path.isfile(WEBUI_INDEX):
-  if os.path.isdir(WEBUI_ASSETS):
-    app.mount("/assets", SafeStaticFiles(directory=WEBUI_ASSETS), name="assets")
-  print("✅ Web UI static routing isolated — SafeStaticFiles prevents WS assertion errors")
-
-  @app.get("/{full_path:path}", include_in_schema=False)
-  def webui_spa(full_path: str, request: Request):
-    blocked = ("api/", "ws", "assets/")
-    if full_path and full_path.startswith(blocked):
-      return {"detail": "Not Found"}
-    path = request.url.path.lstrip("/")
-    if path and path.startswith(blocked):
-      return {"detail": "Not Found"}
-    return FileResponse(WEBUI_INDEX)
-else:
-  print(f"⚠️  Web UI directory not found or missing index: {WEBUI_PATH}")
-
-
-@app.get("/api/health")
-def health() -> Dict[str, Any]:
-  uptime = int(time.time() - START_TIME)
-  return {
-      "status": "ok",
-      "uptime": uptime,
-      "version": "placeholder",
-  }
-
-
-@app.get("/api/state")
-def state() -> Dict[str, Any]:
-  return {
-      "mode": "web",
-      "url": load_config().get("device", {}).get("homepage", "https://example.com"),
-  }
-
-
-def main() -> None:
-  config = load_config()
-  port = resolve_port(config)
-  uvicorn.run(app, host="0.0.0.0", port=port)
-
-
-if __name__ == "__main__":
-  main()
-PY
-  chmod 755 "${DAEMON_MAIN}"
-  chown eris:eris "${DAEMON_MAIN}"
+SOURCE_DAEMON_DIR="${SCRIPT_DIR}/opt/eris/apps/daemon"
+TARGET_DAEMON_DIR="/opt/eris/apps/daemon"
+if [[ -d "${SOURCE_DAEMON_DIR}" ]]; then
+  echo "Deploying Eris daemon from repository…"
+  rm -rf "${TARGET_DAEMON_DIR}"
+  mkdir -p "${TARGET_DAEMON_DIR}"
+  cp -a "${SOURCE_DAEMON_DIR}/." "${TARGET_DAEMON_DIR}/"
+  chown -R eris:eris "${TARGET_DAEMON_DIR}"
+  chmod 755 "${TARGET_DAEMON_DIR}/main.py"
+else
+  echo "Error: Repository daemon source not found at ${SOURCE_DAEMON_DIR}." >&2
+  exit 1
 fi
 
 VENV_PATH="/opt/eris/venv"
@@ -267,7 +183,11 @@ if [[ ! -d "${VENV_PATH}" ]]; then
   python3 -m venv "${VENV_PATH}"
 fi
 "${VENV_PATH}/bin/pip" install --upgrade pip
-"${VENV_PATH}/bin/pip" install fastapi "uvicorn[standard]" pyyaml psutil python-multipart bcrypt
+if [[ -f "${SCRIPT_DIR}/requirements.txt" ]]; then
+  "${VENV_PATH}/bin/pip" install --upgrade -r "${SCRIPT_DIR}/requirements.txt"
+else
+  "${VENV_PATH}/bin/pip" install --upgrade fastapi "uvicorn[standard]" pyyaml psutil python-multipart bcrypt
+fi
 
 WEBUI_DIR="/opt/eris/apps/webui"
 WEBUI_DIST="${WEBUI_DIR}/dist"
