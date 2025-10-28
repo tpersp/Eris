@@ -6,21 +6,24 @@ It’s built for Raspberry Pi Zero 2 W, Pi 4 B, and Ubuntu Server devices.
 
 ## Hardware & software requirements
 
-- Raspberry Pi Zero 2 W (512 MB RAM minimum) or Raspberry Pi 4 B (2 GB+ recommended)  
-- Micro-SD card (16 GB or larger)  
-- HDMI display or capture device  
-- Fresh Raspberry Pi OS Lite / Ubuntu Server installation  
+- Raspberry Pi Zero 2 W (512 MB RAM min) or Pi 4 B (2 GB + recommended)
+- Micro-SD (16 GB +)
+- HDMI display
+- Fresh OS (Lite or Server)
 - Network access (Wi-Fi or Ethernet)
 
 ## Quick install commands
 
 ```bash
 # Quick install (one-liner)
-curl -fsSL https://raw.githubusercontent.com/<user>/eris/main/setup.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/tpersp/Eris/main/setup.sh | sudo bash
 
 # Manual install route
-git clone https://github.com/<user>/eris.git
-cd eris
+# 1. Download the installer
+git clone https://github.com/tpersp/Eris.git
+cd Eris
+
+# 2. Run interactive setup
 sudo bash setup.sh
 ```
 
