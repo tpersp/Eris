@@ -8,7 +8,6 @@ from typing import Dict, List, Optional, Set
 
 import uvicorn
 from fastapi import APIRouter, FastAPI, HTTPException, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, HttpUrl
 
@@ -235,36 +234,15 @@ def handle_sigterm(signum, frame) -> None:
 signal.signal(signal.SIGTERM, handle_sigterm)
 
 
+app.include_router(api_router)
+
 WEBUI_DIST = Path("/opt/eris/apps/webui/dist")
-INDEX_FILE = WEBUI_DIST / "index.html"
 
 if WEBUI_DIST.is_dir():
-    assets_dir = WEBUI_DIST / "assets"
-    if assets_dir.is_dir():
-        app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="webui-assets")
-
-    if INDEX_FILE.is_file():
-
-        @app.get("/", include_in_schema=False)
-        async def serve_index() -> FileResponse:
-            return FileResponse(str(INDEX_FILE))
-    else:
-        logger.warning("Web UI index.html not found at %s", INDEX_FILE)
-
-    additional_files = [p for p in WEBUI_DIST.iterdir() if p.is_file() and p.name != "index.html"]
-    if additional_files:
-
-        @app.get("/{filename}", include_in_schema=False)
-        async def serve_additional(filename: str) -> FileResponse:
-            target = WEBUI_DIST / filename
-            if target.is_file():
-                return FileResponse(str(target))
-            raise HTTPException(status_code=404, detail="Resource not found")
+    logger.info("Serving Web UI from %s", WEBUI_DIST)
+    app.mount("/", StaticFiles(directory=str(WEBUI_DIST), html=True), name="webui")
 else:
     logger.warning("Web UI dist directory %s missing; UI will not be served.", WEBUI_DIST)
-
-
-app.include_router(api_router)
 
 
 def run() -> None:
