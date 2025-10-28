@@ -95,6 +95,13 @@ def build_health_payload() -> Dict[str, float]:
     }
 
 
+def build_health_event() -> Dict[str, object]:
+    payload = build_health_payload()
+    event: Dict[str, object] = {"type": "health", "status": "ok"}
+    event.update(payload)
+    return event
+
+
 async def broadcast(payload: Dict[str, object]) -> None:
     async with ws_lock:
         targets = list(ws_clients)
@@ -114,14 +121,14 @@ async def broadcast(payload: Dict[str, object]) -> None:
 
 async def broadcast_state() -> None:
     state.uptime = compute_uptime()
-    await broadcast({"type": "state", "data": state.dict()})
+    await broadcast({"type": "state", "status": "ok", "data": state.dict()})
 
 
 async def periodic_health() -> None:
     try:
         while True:
             await asyncio.sleep(5)
-            await broadcast({"type": "health", "data": build_health_payload()})
+            await broadcast(build_health_event())
     except asyncio.CancelledError:
         logger.debug("Health publisher cancelled.")
 
@@ -222,8 +229,8 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
     async with ws_lock:
         ws_clients.add(websocket)
     try:
-        await websocket.send_json({"type": "state", "data": state.dict()})
-        await websocket.send_json({"type": "health", "data": build_health_payload()})
+        await websocket.send_json({"type": "state", "status": "ok", "data": state.dict()})
+        await websocket.send_json(build_health_event())
         while True:
             await websocket.receive_text()
     except WebSocketDisconnect:

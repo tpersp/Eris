@@ -1,0 +1,6 @@
+fastapi
+uvicorn[standard]
+pyyaml
+psutil
+python-multipart
+bcrypt

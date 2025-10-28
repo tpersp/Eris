@@ -205,7 +205,7 @@ if [[ ! -d "${VENV_PATH}" ]]; then
   python3 -m venv "${VENV_PATH}"
 fi
 "${VENV_PATH}/bin/pip" install --upgrade pip
-"${VENV_PATH}/bin/pip" install fastapi uvicorn pyyaml psutil python-multipart bcrypt
+"${VENV_PATH}/bin/pip" install fastapi "uvicorn[standard]" pyyaml psutil python-multipart bcrypt
 
 WEBUI_DIR="/opt/eris/apps/webui"
 WEBUI_DIST="${WEBUI_DIR}/dist"
