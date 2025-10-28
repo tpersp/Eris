@@ -8,10 +8,10 @@ from pathlib import Path
 from typing import Dict, List, Optional, Set
 
 import uvicorn
-from fastapi import APIRouter, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse
+from fastapi import APIRouter, FastAPI, HTTPException, Request, Response, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, HttpUrl
-from starlette.staticfiles import StaticFiles
 
 from adapters.chromium import ChromiumAdapter
 from adapters.media_stub import list_media, play
@@ -249,16 +249,17 @@ signal.signal(signal.SIGTERM, handle_sigterm)
 
 app.include_router(api_router)
 
+
 class SafeStaticFiles(StaticFiles):
     async def __call__(self, scope, receive, send):  # type: ignore[override]
         if scope["type"] != "http":
             return
-        await super().__call__(scope, receive, send)
+        return await super().__call__(scope, receive, send)
 
 
 if WEBUI_ASSETS.is_dir():
     app.mount("/assets", SafeStaticFiles(directory=str(WEBUI_ASSETS)), name="assets")
-    logger.info("Serving Web UI assets from %s", WEBUI_ASSETS)
+    logger.info("Serving Web UI from %s", WEBUI_PATH)
 else:
     logger.warning("Web UI assets directory %s missing; static assets will not be served.", WEBUI_ASSETS)
 
@@ -272,13 +273,13 @@ def _serve_index() -> FileResponse:
 
 
 @app.get("/{full_path:path}", include_in_schema=False)
-async def serve_spa(full_path: str, request: Request) -> FileResponse:
+async def serve_spa(full_path: str, request: Request) -> Response:
     blocked_prefixes = ("api/", "ws", "assets/")
     if full_path and any(full_path.startswith(prefix) for prefix in blocked_prefixes):
-        return {"detail": "Not Found"}
+        return JSONResponse({"detail": "Not Found"}, status_code=404)
     path = request.url.path.lstrip("/")
     if path and any(path.startswith(prefix) for prefix in blocked_prefixes):
-        return {"detail": "Not Found"}
+        return JSONResponse({"detail": "Not Found"}, status_code=404)
     return _serve_index()
 
 

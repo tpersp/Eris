@@ -4,6 +4,33 @@ IFS=$'\n\t'
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+show_usage() {
+  cat <<'EOF'
+Usage: setup.sh [--deps-only]
+
+Options:
+  --deps-only   Install or update system dependencies without re-running the interactive installer.
+EOF
+}
+
+DEPS_ONLY=false
+for arg in "$@"; do
+  case "${arg}" in
+    --deps-only)
+      DEPS_ONLY=true
+      ;;
+    -h|--help)
+      show_usage
+      exit 0
+      ;;
+    *)
+      echo "Unknown option: ${arg}" >&2
+      show_usage >&2
+      exit 1
+      ;;
+  esac
+done
+
 prompt_input() {
   local prompt_text="$1"
   local default_value="$2"
@@ -42,12 +69,54 @@ prompt_secret() {
   printf '%s' "${input}"
 }
 
+install_system_dependencies() {
+  export DEBIAN_FRONTEND=noninteractive
+  echo "Updating package lists…"
+  apt update
+  echo "Upgrading existing packages…"
+  apt upgrade -y
+
+  local -a APT_PACKAGES=(
+    python3
+    python3-venv
+    python3-pip
+    git
+    xorg
+    xinit
+    chromium
+    mpv
+    imv
+    cifs-utils
+    curl
+    jq
+  )
+  echo "Installing dependencies…"
+  apt install -y "${APT_PACKAGES[@]}"
+
+  if ! command -v node >/dev/null 2>&1 || ! command -v npm >/dev/null 2>&1; then
+    echo "Installing Node.js and npm…"
+    apt install -y nodejs npm
+  else
+    echo "Node.js and npm already installed."
+  fi
+}
+
 if [[ $EUID -ne 0 ]]; then
   echo "This installer must be run as root."
   exit 1
 fi
 
-echo "Welcome to the Eris installer!"
+if [[ "${DEPS_ONLY}" == true ]]; then
+  echo "Running Eris system dependency sync (--deps-only)."
+else
+  echo "Welcome to the Eris installer!"
+fi
+
+if [[ "${DEPS_ONLY}" == true ]]; then
+  install_system_dependencies
+  echo "✅ System dependencies refreshed."
+  exit 0
+fi
 
 DEVICE_MODEL="Unknown"
 DEVICE_TYPE="generic_linux"
@@ -85,35 +154,7 @@ esac
 echo "Detected: ${FRIENDLY_NAME}"
 echo "Setting up GPU-accelerated Chromium (${CHROMIUM_FLAGS})…"
 
-export DEBIAN_FRONTEND=noninteractive
-echo "Updating package lists…"
-apt update
-echo "Upgrading existing packages…"
-apt upgrade -y
-
-APT_PACKAGES=(
-  python3
-  python3-venv
-  python3-pip
-  git
-  xorg
-  xinit
-  chromium
-  mpv
-  imv
-  cifs-utils
-  curl
-  jq
-)
-echo "Installing dependencies…"
-apt install -y "${APT_PACKAGES[@]}"
-
-if ! command -v node >/dev/null 2>&1 || ! command -v npm >/dev/null 2>&1; then
-  echo "Installing Node.js and npm…"
-  apt install -y nodejs npm
-else
-  echo "Node.js and npm already installed."
-fi
+install_system_dependencies
 
 echo "Creating Eris service user and directories…"
 useradd -r -s /usr/sbin/nologin eris >/dev/null 2>&1 || true
