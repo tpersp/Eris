@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 import signal
 import sys
 import time
@@ -10,6 +11,7 @@ import uvicorn
 from fastapi import APIRouter, FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, HttpUrl
+from starlette.routing import Mount
 
 from adapters.chromium import ChromiumAdapter
 from adapters.media_stub import list_media, play
@@ -34,6 +36,14 @@ ERIS_VERSION = "0.1.0"
 START_TIME = time.time()
 
 app = FastAPI(title="Eris Core Daemon", version=ERIS_VERSION)
+
+WEBUI_PATH = "/opt/eris/apps/webui/dist"
+if os.path.isdir(WEBUI_PATH):
+    app.mount("/", StaticFiles(directory=WEBUI_PATH, html=True), name="webui")
+    print(f"Serving Web UI from {WEBUI_PATH}")
+else:
+    print(f"⚠️  Web UI directory not found: {WEBUI_PATH}")
+
 api_router = APIRouter(prefix="/api")
 state = ErisState(mode="web", url=CONFIG["device"]["homepage"])
 
@@ -236,11 +246,23 @@ signal.signal(signal.SIGTERM, handle_sigterm)
 
 app.include_router(api_router)
 
+def _ensure_webui_mount_last() -> None:
+    webui_route = None
+    for route in list(app.router.routes):
+        if isinstance(route, Mount) and route.name == "webui":
+            webui_route = route
+            break
+    if webui_route:
+        app.router.routes.remove(webui_route)
+        app.router.routes.append(webui_route)
+
+
+_ensure_webui_mount_last()
+
 WEBUI_DIST = Path("/opt/eris/apps/webui/dist")
 
 if WEBUI_DIST.is_dir():
     logger.info("Serving Web UI from %s", WEBUI_DIST)
-    app.mount("/", StaticFiles(directory=str(WEBUI_DIST), html=True), name="webui")
 else:
     logger.warning("Web UI dist directory %s missing; UI will not be served.", WEBUI_DIST)
 

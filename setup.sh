@@ -135,6 +135,7 @@ from typing import Any, Dict
 import uvicorn
 import yaml
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 
 START_TIME = time.time()
 CONFIG_PATH = "/etc/eris/config.yaml"
@@ -158,6 +159,13 @@ def resolve_port(config: Dict[str, Any]) -> int:
 
 
 app = FastAPI(title="Eris Placeholder Daemon")
+
+WEBUI_PATH = "/opt/eris/apps/webui/dist"
+if os.path.isdir(WEBUI_PATH):
+  app.mount("/", StaticFiles(directory=WEBUI_PATH, html=True), name="webui")
+  print(f"Serving Web UI from {WEBUI_PATH}")
+else:
+  print(f"⚠️  Web UI directory not found: {WEBUI_PATH}")
 
 
 @app.get("/api/health")

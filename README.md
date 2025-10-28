@@ -84,6 +84,8 @@ curl http://localhost:8080/api/health
 
 The API should return JSON containing uptime information, and the connected display should load the homepage defined in `config.yaml`.
 
+Once setup finishes, browse to `http://<device-ip>:8080/` to open the Eris dashboard served by the local device.
+
 ## Updating or uninstalling
 
 Helper scripts live in `scripts/`:
