@@ -58,7 +58,7 @@ APT_PACKAGES=(
   git
   xorg
   xinit
-  chromium-browser
+  chromium
   mpv
   imv
   cifs-utils
