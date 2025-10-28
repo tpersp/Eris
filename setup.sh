@@ -129,12 +129,18 @@ MOUNT_POINT=""
 if [[ "${CONFIGURE_SHARE^^}" == "Y" || "${CONFIGURE_SHARE}" == "" ]]; then
   USE_NETWORK=true
   NETWORK_PATH="$(prompt_input "Enter Samba share (e.g. //192.168.1.10/Media): " "//nas/media")"
-  SAMBA_USER="$(prompt_input "Enter Samba username: " "guest")"
-  SAMBA_PASS="$(prompt_secret "Enter Samba password: ")"
+  SAMBA_USER="$(prompt_input "Enter Samba username [leave blank for guest access]: " "")"
+  SAMBA_PASS="$(prompt_secret "Enter Samba password (leave blank for guest access): ")"
   MOUNT_POINT="/mnt/eris_media"
   mkdir -p "${MOUNT_POINT}"
   chown eris:eris "${MOUNT_POINT}"
-  FSTAB_ENTRY="${NETWORK_PATH} ${MOUNT_POINT} cifs username=${SAMBA_USER},password=${SAMBA_PASS},uid=eris,gid=eris,iocharset=utf8,file_mode=0660,dir_mode=0770 0 0"
+  CIFS_OPTIONS="uid=eris,gid=eris,iocharset=utf8,file_mode=0660,dir_mode=0770"
+  if [[ -z "${SAMBA_USER}" && -z "${SAMBA_PASS}" ]]; then
+    CIFS_OPTIONS="guest,${CIFS_OPTIONS}"
+  else
+    CIFS_OPTIONS="username=${SAMBA_USER},password=${SAMBA_PASS},${CIFS_OPTIONS}"
+  fi
+  FSTAB_ENTRY="${NETWORK_PATH} ${MOUNT_POINT} cifs ${CIFS_OPTIONS} 0 0"
   if ! grep -qsF "${NETWORK_PATH} ${MOUNT_POINT} cifs" /etc/fstab; then
     echo "Adding network share to /etc/fstab…"
     echo "${FSTAB_ENTRY}" >> /etc/fstab
@@ -144,7 +150,7 @@ if [[ "${CONFIGURE_SHARE^^}" == "Y" || "${CONFIGURE_SHARE}" == "" ]]; then
   echo "Mounting ${MOUNT_POINT}…"
   if ! mount "${MOUNT_POINT}" >/dev/null 2>&1; then
     echo "Mount failed; retrying with explicit options…"
-    mount -t cifs "${NETWORK_PATH}" "${MOUNT_POINT}" -o "username=${SAMBA_USER},password=${SAMBA_PASS},uid=eris,gid=eris,iocharset=utf8,file_mode=0660,dir_mode=0770"
+    mount -t cifs "${NETWORK_PATH}" "${MOUNT_POINT}" -o "${CIFS_OPTIONS}"
   fi
 else
   echo "Skipping network media share configuration."
