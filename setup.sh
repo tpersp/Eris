@@ -134,7 +134,8 @@ from typing import Any, Dict
 
 import uvicorn
 import yaml
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 START_TIME = time.time()
@@ -161,11 +162,25 @@ def resolve_port(config: Dict[str, Any]) -> int:
 app = FastAPI(title="Eris Placeholder Daemon")
 
 WEBUI_PATH = "/opt/eris/apps/webui/dist"
-if os.path.isdir(WEBUI_PATH):
-  app.mount("/", StaticFiles(directory=WEBUI_PATH, html=True), name="webui")
+WEBUI_INDEX = os.path.join(WEBUI_PATH, "index.html")
+WEBUI_ASSETS = os.path.join(WEBUI_PATH, "assets")
+if os.path.isdir(WEBUI_PATH) and os.path.isfile(WEBUI_INDEX):
+  if os.path.isdir(WEBUI_ASSETS):
+    app.mount("/assets", StaticFiles(directory=WEBUI_ASSETS), name="webui-assets")
+
+  @app.get("/", include_in_schema=False)
+  def webui_root() -> FileResponse:
+    return FileResponse(WEBUI_INDEX)
+
+  @app.get("/{full_path:path}", include_in_schema=False)
+  def webui_spa(full_path: str) -> FileResponse:
+    if full_path.startswith(("api/", "assets/", "ws")):
+      raise HTTPException(status_code=404, detail="Not Found")
+    return FileResponse(WEBUI_INDEX)
+
   print(f"Serving Web UI from {WEBUI_PATH}")
 else:
-  print(f"⚠️  Web UI directory not found: {WEBUI_PATH}")
+  print(f"⚠️  Web UI directory not found or missing index: {WEBUI_PATH}")
 
 
 @app.get("/api/health")

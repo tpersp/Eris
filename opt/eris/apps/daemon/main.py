@@ -9,9 +9,9 @@ from typing import Dict, List, Optional, Set
 
 import uvicorn
 from fastapi import APIRouter, FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, HttpUrl
-from starlette.routing import Mount
 
 from adapters.chromium import ChromiumAdapter
 from adapters.media_stub import list_media, play
@@ -248,24 +248,32 @@ signal.signal(signal.SIGTERM, handle_sigterm)
 app.include_router(api_router)
 
 
-def _ensure_webui_mount_last() -> None:
-    webui_route = None
-    for route in list(app.router.routes):
-        if isinstance(route, Mount) and route.name == "webui":
-            webui_route = route
-            break
-    if webui_route:
-        app.router.routes.remove(webui_route)
-        app.router.routes.append(webui_route)
-
-
 def mount_webui_assets() -> None:
-    if WEBUI_PATH.is_dir():
-        app.mount("/", StaticFiles(directory=str(WEBUI_PATH), html=True), name="webui")
-        _ensure_webui_mount_last()
-        logger.info("Serving Web UI from %s", WEBUI_PATH)
-    else:
+    if not WEBUI_PATH.is_dir():
         logger.warning("Web UI dist directory %s missing; UI will not be served.", WEBUI_PATH)
+        return
+
+    assets_dir = WEBUI_PATH / "assets"
+    if assets_dir.is_dir():
+        app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="webui-assets")
+
+    index_file = WEBUI_PATH / "index.html"
+    if not index_file.is_file():
+        logger.warning("Web UI index file missing at %s; UI will not be served.", index_file)
+        return
+
+    logger.info("Serving Web UI from %s", WEBUI_PATH)
+
+    @app.get("/", include_in_schema=False)
+    async def webui_root() -> FileResponse:  # type: ignore[override]
+        return FileResponse(str(index_file))
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def webui_spa(full_path: str) -> FileResponse:  # type: ignore[override]
+        blocked_prefixes = ("api/", "assets/", "ws", "favicon", "static/")
+        if any(full_path.startswith(prefix) for prefix in blocked_prefixes):
+            raise HTTPException(status_code=404, detail="Not Found")
+        return FileResponse(str(index_file))
 
 
 mount_webui_assets()
