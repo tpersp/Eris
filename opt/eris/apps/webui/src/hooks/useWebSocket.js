@@ -1,11 +1,12 @@
 import { useEffect, useRef } from 'react';
 
-function resolveWsUrl() {
+function resolveWsUrl(token) {
   const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
-  return `${protocol}://${window.location.host}/ws`;
+  const tokenParam = token ? `?token=${encodeURIComponent(token)}` : '';
+  return `${protocol}://${window.location.host}/ws${tokenParam}`;
 }
 
-export function useWebSocket(callbacks) {
+export function useWebSocket(token, callbacks) {
   const callbacksRef = useRef(callbacks);
 
   useEffect(() => {
@@ -13,11 +14,15 @@ export function useWebSocket(callbacks) {
   }, [callbacks]);
 
   useEffect(() => {
+    if (!token) {
+      return undefined;
+    }
+
     let isMounted = true;
     let ws;
 
     const connect = () => {
-      ws = new WebSocket(resolveWsUrl());
+      ws = new WebSocket(resolveWsUrl(token));
 
       ws.onopen = () => {
         if (!isMounted) {
@@ -62,5 +67,5 @@ export function useWebSocket(callbacks) {
         ws.close();
       }
     };
-  }, []);
+  }, [token]);
 }

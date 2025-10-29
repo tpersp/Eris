@@ -1,5 +1,5 @@
 const baseButton =
-  'flex-1 min-w-[120px] rounded-xl border border-slate-600/70 bg-slate-900/60 px-4 py-3 text-sm font-semibold text-slate-200 shadow transition hover:border-neon/70 hover:text-neon disabled:cursor-not-allowed disabled:border-slate-700 disabled:text-slate-500';
+  'flex-1 min-w-[120px] rounded-xl border border-slate-600/70 bg-slate-900/60 px-4 py-3 text-sm font-semibold text-slate-200 shadow transition hover:border-emerald-400/70 hover:text-emerald-200 disabled:cursor-not-allowed disabled:border-slate-700 disabled:text-slate-500';
 
 export default function ControlButtons({
   disabled,

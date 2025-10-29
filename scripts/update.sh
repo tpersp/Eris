@@ -22,6 +22,19 @@ if [ -f requirements.txt ]; then
   pip install --upgrade -r requirements.txt
 fi
 
+WEBUI_DIR="/opt/eris/apps/webui"
+if [ -d "${WEBUI_DIR}" ]; then
+  echo "Rebuilding Eris web UI..."
+  if command -v npm >/dev/null 2>&1; then
+    pushd "${WEBUI_DIR}" >/dev/null
+    npm install --omit=dev
+    npm run build
+    popd >/dev/null
+  else
+    echo "npm not available; skipped web UI rebuild."
+  fi
+fi
+
 if [ -x setup.sh ]; then
   echo "Syncing system environment..."
   bash setup.sh --deps-only || true

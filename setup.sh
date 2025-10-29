@@ -83,12 +83,16 @@ install_system_dependencies() {
     git
     xorg
     xinit
+    x11-xserver-utils
     chromium
     mpv
     imv
     cifs-utils
     curl
     jq
+    matchbox-window-manager
+    openbox
+    ffmpeg
   )
   echo "Installing dependencies…"
   apt install -y "${APT_PACKAGES[@]}"
@@ -165,6 +169,8 @@ if [[ -z "${CHROMIUM_BINARY}" ]]; then
   CHROMIUM_BINARY="/usr/bin/chromium-browser"
 fi
 
+DISPLAY_LAUNCHER="$(command -v xinit || echo /usr/bin/xinit) /opt/eris/scripts/kiosk-session.sh -- :0 -nolisten tcp"
+
 echo "Creating Eris service user and directories…"
 useradd -r -s /usr/sbin/nologin eris >/dev/null 2>&1 || true
 mkdir -p /opt/eris
@@ -172,6 +178,10 @@ mkdir -p /opt/eris/apps/daemon
 mkdir -p /var/lib/eris/media/local
 mkdir -p /var/lib/eris/media/cache
 chown -R eris:eris /opt/eris /var/lib/eris
+touch /var/lib/eris/media/metadata.json
+touch /var/lib/eris/playlists.json
+chown eris:eris /var/lib/eris/media/metadata.json /var/lib/eris/playlists.json
+chmod 640 /var/lib/eris/media/metadata.json /var/lib/eris/playlists.json
 SOURCE_DAEMON_DIR="${SCRIPT_DIR}/opt/eris/apps/daemon"
 TARGET_DAEMON_DIR="/opt/eris/apps/daemon"
 if [[ -d "${SOURCE_DAEMON_DIR}" ]]; then
@@ -184,6 +194,19 @@ if [[ -d "${SOURCE_DAEMON_DIR}" ]]; then
 else
   echo "Error: Repository daemon source not found at ${SOURCE_DAEMON_DIR}." >&2
   exit 1
+fi
+
+SOURCE_SCRIPTS_DIR="${SCRIPT_DIR}/opt/eris/scripts"
+TARGET_SCRIPTS_DIR="/opt/eris/scripts"
+if [[ -d "${SOURCE_SCRIPTS_DIR}" ]]; then
+  echo "Deploying Eris kiosk scripts…"
+  rm -rf "${TARGET_SCRIPTS_DIR}"
+  mkdir -p "${TARGET_SCRIPTS_DIR}"
+  cp -a "${SOURCE_SCRIPTS_DIR}/." "${TARGET_SCRIPTS_DIR}/"
+  chown -R eris:eris "${TARGET_SCRIPTS_DIR}"
+  chmod 755 "${TARGET_SCRIPTS_DIR}"/*.sh
+else
+  echo "Warning: kiosk helper scripts not found; display bootstrap may fail."
 fi
 
 VENV_PATH="/opt/eris/venv"
@@ -288,6 +311,11 @@ if [[ "${USE_NETWORK}" == false ]]; then
   MOUNT_POINT="${LOCAL_MEDIA_PATH}"
 fi
 
+CACHE_MEDIA_PATH="/var/lib/eris/media/cache"
+
+MPV_BINARY="$(command -v mpv || echo mpv)"
+IMV_BINARY="$(command -v imv || echo imv)"
+
 UI_PORT="$(prompt_input "Enter Web UI port [8080]: " "8080")"
 while [[ -z "${UI_PORT}" || "${UI_PORT}" =~ [^0-9] ]]; do
   echo "Port must be a numeric value."
@@ -315,6 +343,12 @@ PY
 unset ADMIN_PASSWORD
 unset SAMBA_PASS
 
+TOKEN_SECRET="$("${VENV_PATH}/bin/python" - <<'PY'
+import secrets
+print(secrets.token_urlsafe(48))
+PY
+)"
+
 mkdir -p /etc/eris
 CONFIG_PATH="/etc/eris/config.yaml"
 echo "Writing configuration to ${CONFIG_PATH}…"
@@ -322,17 +356,36 @@ cat > "${CONFIG_PATH}" <<EOF
 device:
   name: eris-$(hostname)
   homepage: "https://example.com"
+display:
+  name: ":0"
+  launcher: "${DISPLAY_LAUNCHER}"
+  startup_timeout: 15
 ui:
   port: ${UI_PORT}
 media:
   use_network: ${USE_NETWORK}
   network_path: "${NETWORK_PATH}"
   mount_point: "${MOUNT_POINT}"
+  local_path: "${LOCAL_MEDIA_PATH}"
+  cache_path: "${CACHE_MEDIA_PATH}"
+  metadata_path: "/var/lib/eris/media/metadata.json"
+  mpv_binary: "${MPV_BINARY}"
+  imv_binary: "${IMV_BINARY}"
+  image_duration: 30
+  max_upload_mb: 200
+state:
+  path: "/var/lib/eris/state.json"
+  playlist_path: "/var/lib/eris/playlists.json"
 security:
   password_hash: "${PASSWORD_HASH}"
+  token_secret: "${TOKEN_SECRET}"
+  token_ttl: 3600
 chromium:
   binary: "${CHROMIUM_BINARY}"
   flags_file: "${CHROMIUM_FLAGS_FILE}"
+  debug_port: 9222
+scheduler:
+  tick_interval: 15
 EOF
 chown eris:eris "${CONFIG_PATH}"
 chmod 640 "${CONFIG_PATH}"

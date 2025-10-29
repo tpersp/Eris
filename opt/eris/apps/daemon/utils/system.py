@@ -1,5 +1,7 @@
 import logging
 import os
+import shutil
+import subprocess
 from pathlib import Path
 from typing import Any, Dict
 
@@ -19,9 +21,39 @@ DEFAULT_CHROMIUM_BINARY = os.environ.get(
 DEFAULT_CONFIG: Dict[str, Any] = {
     "ui": {"port": 8080},
     "device": {"homepage": "https://example.com"},
+    "display": {
+        "name": ":0",
+        "launcher": "/usr/bin/xinit /opt/eris/scripts/kiosk-session.sh -- :0 -nolisten tcp",
+        "startup_timeout": 12.0,
+    },
     "chromium": {
         "flags_file": DEFAULT_FLAGS_FILE,
         "binary": DEFAULT_CHROMIUM_BINARY,
+        "debug_port": 9222,
+    },
+    "media": {
+        "use_network": False,
+        "network_path": "",
+        "mount_point": "/mnt/eris_media",
+        "local_path": "/var/lib/eris/media/local",
+        "cache_path": "/var/lib/eris/media/cache",
+        "mpv_binary": "mpv",
+        "imv_binary": "imv",
+        "image_duration": 30,
+        "metadata_path": "/var/lib/eris/media/metadata.json",
+        "max_upload_mb": 200,
+    },
+    "state": {
+        "path": "/var/lib/eris/state.json",
+        "playlist_path": "/var/lib/eris/playlists.json",
+    },
+    "security": {
+        "password_hash": "",
+        "token_secret": "",
+        "token_ttl": 3600,
+    },
+    "scheduler": {
+        "tick_interval": 15,
     },
 }
 
@@ -79,8 +111,20 @@ def get_temperature() -> float:
 
 
 def set_display_blank(on: bool) -> None:
+    logger = logging.getLogger(__name__)
     state = "on" if on else "off"
-    logging.getLogger(__name__).info("Display blanking requested: %s", state)
-    # Placeholder for future DPMS/xset integration.
-    if not os.environ.get("DISPLAY"):
-        os.environ.setdefault("DISPLAY", ":0")
+    logger.info("Display blanking requested: %s", state)
+
+    display = os.environ.get("DISPLAY") or ":0"
+    os.environ.setdefault("DISPLAY", display)
+
+    xset_binary = shutil.which("xset")
+    if not xset_binary:
+        logger.warning("xset binary not found; cannot toggle display blanking.")
+        return
+
+    command = [xset_binary, "-display", display, "dpms", "force", "off" if on else "on"]
+    try:
+        subprocess.run(command, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except subprocess.CalledProcessError as exc:
+        logger.error("DPMS command failed: %s", exc)

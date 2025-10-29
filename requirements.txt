@@ -4,3 +4,6 @@ pyyaml
 psutil
 python-multipart
 bcrypt
+websocket-client
+PyJWT
+pytest

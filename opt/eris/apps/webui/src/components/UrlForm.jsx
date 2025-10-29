@@ -37,12 +37,12 @@ export default function UrlForm({ value, onChange, onSubmit, disabled }) {
           value={value ?? ''}
           onChange={(event) => onChange(event.target.value)}
           disabled={disabled}
-          className="w-full rounded-xl border border-slate-700 bg-slate-900/70 px-4 py-3 text-slate-100 outline-none transition focus:border-neon focus:ring-2 focus:ring-neon/50 disabled:cursor-not-allowed disabled:opacity-50"
+          className="w-full rounded-xl border border-slate-700 bg-slate-900/70 px-4 py-3 text-slate-100 outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/40 disabled:cursor-not-allowed disabled:opacity-50"
         />
         <button
           type="submit"
           disabled={disabled || isSubmitting}
-          className="inline-flex items-center justify-center rounded-xl bg-neon px-6 py-3 text-sm font-semibold text-slate-900 transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-70"
+          className="inline-flex items-center justify-center rounded-xl bg-emerald-500 px-6 py-3 text-sm font-semibold text-slate-900 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-70"
         >
           {isSubmitting ? 'Sending…' : 'Go'}
         </button>
